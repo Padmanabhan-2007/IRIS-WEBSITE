@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iris — a generative classifier</title>
+<meta name="description" content="Three Gaussians, one flower, Bayes' rule. A hand-built probabilistic classifier whose bloom and colour are the answer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("iris-theme")||"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="stage" aria-hidden="true"></canvas>
+<svg id="callouts" aria-hidden="true">
+  <g id="coFall"><path/><circle r="4"/><text class="t1"></text><text class="t2"></text></g>
+  <g id="coStd"><path/><circle r="4"/><text class="t1"></text><text class="t2"></text></g>
+</svg>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="nav">
+  <a class="nav-mark" href="#top">Iris<sup>4D</sup></a>
+  <nav>
+    <a href="#lab"><b>I</b>Specimen</a>
+    <a href="#field"><b>II</b>Field</a>
+    <a href="#machinery"><b>III</b>Machinery</a>
+    <a href="#trial"><b>IV</b>Trial</a>
+  </nav>
+  <div class="nav-right">
+    <button class="theme" id="themeBtn" aria-label="Switch colour theme"><i></i><span>Dark</span></button>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
+  </div>
+</header>
+<div class="rail" aria-hidden="true"><i id="railFill"></i></div>
+
+<main id="top">
+  <!-- ============================================================ HERO -->
+  <section class="hero" id="hero">
+    <div class="hero-art" data-flower="hero" data-stem="1"></div>
+    <div class="hero-copy">
+      <p class="eyebrow reveal">Iris · probabilistic generative classifier</p>
+      <h1 class="reveal d1">A flower, read<br>as four <em>numbers.</em></h1>
+      <p class="lede reveal d2">Fit a Gaussian to each species, let Bayes' rule weigh them, and see which one the flower belongs to. <span class="fine"><b id="hN">150</b> specimens · fit by hand in <b id="hFit">—</b> ms.</span></p>
+      <div class="pick reveal d3" id="speciesPick" role="group" aria-label="Preview a species"></div>
+      <a class="cta reveal d4" href="#lab">Measure a specimen <span>↓</span></a>
+    </div>
+  </section>
+
+  <!-- ============================================================ LAB -->
+  <section class="plate lab" id="lab">
+    <header class="plate-head">
+      <p class="plate-no reveal">(I)</p>
+      <h2 class="reveal d1">The specimen <em>table</em></h2>
+      <p class="plate-sub reveal d2">Move a measurement. The server runs your numbers through the model; falls follow the sepals, standards follow the petals, and the whole page takes the colour of the verdict.</p>
+    </header>
+
+    <div class="lab-grid">
+      <aside class="controls" id="controls">
+        <div class="presets" id="presets"></div>
+        <div id="sliders"></div>
+        <p class="hint">Coloured dashes under each track show where the species live (mean ± 1σ).</p>
+      </aside>
+
+      <div class="stage" data-flower="lab" id="labStage">
+        <div class="stage-cap"><span>drag to turn the bloom</span><span id="capRight"></span></div>
+      </div>
+
+      <aside class="readout" id="readout">
+        <p class="label">Verdict</p>
+        <div class="verdict"><h3 id="verdict" class="verdict-name">—</h3></div>
+        <p class="confidence" id="confidence">&nbsp;</p>
+        <div class="posts" id="posts"></div>
+        <details class="under" open>
+          <summary>Under the hood</summary>
+          <table class="hood" id="hood">
+            <thead><tr><th></th><th>P(C)</th><th>ln p(x|C)</th><th>d²</th><th>g(x)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="foot">d² is the squared Mahalanobis distance from the class mean; g is the log discriminant Bayes' rule maximises.</p>
+        </details>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============================================================ FIELD -->
+  <section class="plate field" id="field">
+    <header class="plate-head">
+      <p class="plate-no reveal">(II)</p>
+      <h2 class="reveal d1">The <em>field</em> each species claims</h2>
+      <p class="plate-sub reveal d2">Four dimensions flattened to two. Rings are Gaussian contours at 1, 2 and 3 σ; the wash is who the model would back knowing only these two traits. Click to move your specimen there.</p>
+      <div class="dock" data-flower="dock"></div>
+    </header>
+    <div class="field-grid">
+      <div class="field-ctl">
+        <div class="axis-pick"><p class="label">Horizontal</p><div class="chips" id="axisX"></div></div>
+        <div class="axis-pick"><p class="label">Vertical</p><div class="chips" id="axisY"></div></div>
+        <div class="axis-pick"><p class="label">Layers</p>
+          <div class="chips" id="layers">
+            <button class="chip on" data-layer="regions">Territory</button>
+            <button class="chip on" data-layer="rings">Contours</button>
+            <button class="chip on" data-layer="dots">Specimens</button>
+          </div>
+        </div>
+        <ul class="legend" id="legend"></ul>
+        <p class="hint" id="fieldHint"></p>
+      </div>
+      <div class="field-wrap"><canvas id="fieldCv"></canvas><div class="tip" id="fieldTip"></div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ MACHINERY -->
+  <section class="plate machinery" id="machinery">
+    <header class="plate-head">
+      <p class="plate-no reveal">(III)</p>
+      <h2 class="reveal d1">The <em>machinery</em>, five moves</h2>
+      <p class="plate-sub reveal d2">No black box: every number was computed by <code>GaussianGenerativeClassifier</code> in plain NumPy and read back through the API.</p>
+      <div class="dock" data-flower="dock"></div>
+    </header>
+    <div class="steps">
+      <article class="step reveal">
+        <div class="step-no">01</div>
+        <div class="step-body">
+          <h3>Count</h3>
+          <p>How common is each species in the training set? That is the prior.</p>
+          <div class="eq" data-tex="P(C_k)=\dfrac{N_k}{N}"></div>
+          <div class="priors" id="priors"></div>
+        </div>
+      </article>
+      <article class="step reveal">
+        <div class="step-no">02</div>
+        <div class="step-body">
+          <h3>Centre</h3>
+          <p>The average flower of each species — a point in four dimensions.</p>
+          <div class="eq" data-tex="\boldsymbol\mu_k=\dfrac{1}{N_k}\sum_{i\in C_k}\mathbf x_i"></div>
+          <div class="means" id="means"></div>
+        </div>
+      </article>
+      <article class="step reveal">
+        <div class="step-no">03</div>
+        <div class="step-body">
+          <h3>Spread</h3>
+          <p>How the four measurements wander together. Maximum-likelihood, so divide by <i>N<sub>k</sub></i>, not <i>N<sub>k</sub>−1</i>. Tint is correlation; the number is covariance.</p>
+          <div class="eq" data-tex="\Sigma_k=\dfrac{1}{N_k}\sum_{i\in C_k}(\mathbf x_i-\boldsymbol\mu_k)(\mathbf x_i-\boldsymbol\mu_k)^{\!\top}"></div>
+          <div class="covs" id="covs"></div>
+        </div>
+      </article>
+      <article class="step reveal">
+        <div class="step-no">04</div>
+        <div class="step-body">
+          <h3>Compare</h3>
+          <p>How surprised would species <i>k</i> be to meet this flower? A multivariate bell curve answers, in log-space with <code>slogdet</code> and a linear solve — never an explicit inverse.</p>
+          <div class="eq" data-tex="p(\mathbf x\mid C_k)=\dfrac{\exp\!\big(-\tfrac12(\mathbf x-\boldsymbol\mu_k)^{\!\top}\Sigma_k^{-1}(\mathbf x-\boldsymbol\mu_k)\big)}{(2\pi)^{d/2}\,|\Sigma_k|^{1/2}}"></div>
+        </div>
+      </article>
+      <article class="step reveal">
+        <div class="step-no">05</div>
+        <div class="step-body">
+          <h3>Decide</h3>
+          <p>Weigh each likelihood by its prior, normalise with log-sum-exp, take the largest.</p>
+          <div class="eq" data-tex="P(C_k\mid\mathbf x)=\dfrac{p(\mathbf x\mid C_k)\,P(C_k)}{\sum_j p(\mathbf x\mid C_j)\,P(C_j)}\qquad \hat C=\arg\max_k\,g_k(\mathbf x)"></div>
+          <div class="eq small" data-tex="g_k(\mathbf x)=-\tfrac12\ln|\Sigma_k|-\tfrac12(\mathbf x-\boldsymbol\mu_k)^{\!\top}\Sigma_k^{-1}(\mathbf x-\boldsymbol\mu_k)+\ln P(C_k)"></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============================================================ TRIAL -->
+  <section class="plate trial" id="trial">
+    <header class="plate-head">
+      <p class="plate-no reveal">(IV)</p>
+      <h2 class="reveal d1">The <em>trial</em> on unseen flowers</h2>
+      <p class="plate-sub reveal d2">Thirty percent of the garden was held back. Each mark is one of those flowers, drawn from its own measurements. Hover for confidence, click to carry it to the table.</p>
+      <div class="dock" data-flower="dock"></div>
+    </header>
+    <div class="trial-grid">
+      <div class="score">
+        <p class="label">Test accuracy</p>
+        <div class="bignum"><span id="accNum">0</span><small>%</small></div>
+        <p class="score-sub" id="accSub"></p>
+        <div class="cm-wrap">
+          <p class="label">Confusion matrix <i>(rows = truth, columns = prediction)</i></p>
+          <div class="cm" id="cm"></div>
+        </div>
+      </div>
+      <div class="specimens">
+        <p class="label">Forty-five held-out specimens</p>
+        <div class="grid45" id="grid45"></div>
+        <div class="prf" id="prf"></div>
+        <div class="tip" id="gridTip"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="colophon">
+  <div class="colo-big">Iris<i>.</i></div>
+  <div class="colo-cols">
+    <p><b>Model</b> Gaussian generative classifier — MLE means &amp; covariances, log-space Bayes posteriors. Hand-written NumPy; no <code>GaussianNB</code>.</p>
+    <p><b>Bridge</b> FastAPI: <code>/api/predict</code> · <code>/api/meta</code> · <code>/api/field</code> · <code>/api/evaluation</code> · <code>/api/dataset</code>.</p>
+    <p><b>Bloom</b> WebGL: smooth parametric petals, soft shadows, image-based light. Anatomy from your measurements, colour from the posterior.</p>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" defer></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
